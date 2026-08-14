@@ -1,0 +1,28 @@
+services:
+  docker-tracker:
+    build: .
+    # or, once you've pushed/pulled an image instead of building locally:
+    # image: docker-tracker:latest
+    container_name: docker-tracker
+    restart: unless-stopped
+    ports:
+      - "8752:8000"
+    volumes:
+      - ./data:/data
+      # Lets the app auto-track your currently-running containers (read-only).
+      # Comment this out if you'd rather not share the Docker socket —
+      # everything else still works, you'll just add apps by hand.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # How often (in hours) to poll GitHub for new releases
+      CHECK_INTERVAL_HOURS: "6"
+      # How often (in minutes) to scan the Docker socket for new containers
+      # to auto-track. Only matters if the socket volume below is mounted.
+      CONTAINER_SYNC_INTERVAL_MINUTES: "10"
+      # Seconds to wait between checking each app, to stay under GitHub's rate limit
+      REQUEST_SPACING_SECONDS: "3"
+      # Optional: paste a Discord webhook URL to get pinged on new releases
+      DISCORD_WEBHOOK_URL: ""
+      # Optional: a GitHub personal access token raises the unauthenticated
+      # rate limit (60/hr) to 5000/hr. Leave blank to skip.
+      GITHUB_TOKEN: ""

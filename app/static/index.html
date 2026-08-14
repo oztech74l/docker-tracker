@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Docker Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css" />
+</head>
+<body>
+
+<div class="scanline" id="scanline"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" id="brand-mark"></span>
+    <div class="brand-text">
+      <h1>Docker Tracker</h1>
+      <p class="tagline">Release Updates Tracker for Installed Docker in your Homelab</p>
+    </div>
+  </div>
+
+  <div class="stats" id="stats">
+    <div class="stat">
+      <span class="stat-value" id="stat-total">–</span>
+      <span class="stat-label">tracked</span>
+    </div>
+    <div class="stat stat-signal">
+      <span class="stat-value" id="stat-updates">–</span>
+      <span class="stat-label">updates</span>
+    </div>
+    <div class="stat stat-error">
+      <span class="stat-value" id="stat-errors">–</span>
+      <span class="stat-label">errors</span>
+    </div>
+  </div>
+
+  <div class="topbar-actions">
+    <button class="btn btn-ghost" id="rescan-btn">Rescan containers</button>
+    <button class="btn btn-ghost" id="check-all-btn">Check for updates</button>
+    <button class="btn btn-primary" id="add-app-btn">Track an app</button>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Filter by name or repo…" />
+    <label class="toggle">
+      <input type="checkbox" id="filter-updates" />
+      <span>Updates available only</span>
+    </label>
+  </div>
+
+  <div id="empty-state" class="empty-state hidden">
+    <div class="empty-glyph">◎</div>
+    <h2>Nothing tracked yet</h2>
+    <p>If the Docker socket is mounted, your running containers will show up here automatically. Otherwise, add the GitHub repo for each app you want watched.</p>
+    <button class="btn btn-primary" id="empty-add-btn">Track your first app</button>
+  </div>
+
+  <div class="grid" id="app-grid"></div>
+</main>
+
+<footer class="site-footer">
+  <a href="https://oztechsolutions.au" target="_blank" rel="noopener">Powered by Oztech Solutions</a>
+</footer>
+
+<!-- Add/Edit modal -->
+<div class="modal-backdrop hidden" id="modal-backdrop">
+  <div class="modal">
+    <h2 id="modal-title">Track a new app</h2>
+    <form id="app-form">
+      <label>
+        Display name
+        <input type="text" id="f-name" placeholder="e.g. Immich" required />
+      </label>
+      <label>
+        GitHub repo
+        <input type="text" id="f-repo" placeholder="owner/repo or full URL" required />
+      </label>
+      <label>
+        Docker image <span class="optional">(optional)</span>
+        <input type="text" id="f-image" placeholder="e.g. ghcr.io/immich-app/immich-server" />
+      </label>
+      <label>
+        Version currently running <span class="optional">(optional — leave blank to baseline from latest)</span>
+        <input type="text" id="f-version" placeholder="e.g. v1.118.2" />
+      </label>
+      <p class="form-error hidden" id="form-error"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancel-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-btn">Start tracking</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<script src="/assets/app.js"></script>
+</body>
+</html>
