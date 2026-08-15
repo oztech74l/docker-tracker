@@ -2,7 +2,7 @@ name: Build and publish image
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "master"]
     tags: ["v*"]
   workflow_dispatch: {}
 
@@ -37,7 +37,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=sha,prefix=,format=short
