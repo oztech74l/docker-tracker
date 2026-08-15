@@ -57,7 +57,6 @@ def init_db():
             last_checked TEXT,
             update_available INTEGER DEFAULT 0,
             last_error TEXT,
-            last_updated TEXT,
             created_at TEXT NOT NULL
         )
         """
@@ -372,167 +371,6 @@ async def container_sync_loop():
         await asyncio.sleep(CONTAINER_SYNC_INTERVAL_MINUTES * 60)
 
 
-# ---------- fully-automatic container updates ----------
-#
-# This is the riskiest part of the app: it pulls a new image and then stops,
-# removes, and recreates the container in place using its existing config
-# (env vars, volumes, ports, restart policy, networks). The sequence below
-# is ordered to fail safe where it can — the new container is built and
-# confirmed *before* the old one is touched — but recreating a running
-# container is inherently not zero-risk. See the README before relying on
-# this for anything you can't afford to lose.
-
-MUTABLE_TAGS = {"latest", "stable", "main", "master", "edge", "release", "rolling"}
-
-
-def _guess_update_target(image_ref: str, latest_version: Optional[str]):
-    """Given the image reference a container was created from (e.g.
-    'louislam/uptime-kuma:latest') and the latest GitHub release tag, work
-    out which image:tag candidates are worth trying to pull. Returns
-    (repo_ref, [candidate_tags_in_order])."""
-    ref = image_ref.split("@")[0]
-    last_colon = ref.rfind(":")
-    last_slash = ref.rfind("/")
-    if last_colon > last_slash:
-        repo_ref, current_tag = ref[:last_colon], ref[last_colon + 1:]
-    else:
-        repo_ref, current_tag = ref, "latest"
-
-    if current_tag in MUTABLE_TAGS or not latest_version:
-        # mutable tag: "updating" means re-pulling the same tag to pick up
-        # whatever digest it currently points at
-        return repo_ref, [current_tag]
-
-    stripped = latest_version.lstrip("vV")
-    candidates = []
-    for c in (latest_version, stripped, f"v{stripped}"):
-        if c not in candidates:
-            candidates.append(c)
-    if current_tag not in candidates:
-        candidates.append(current_tag)  # last resort
-    return repo_ref, candidates
-
-
-def _update_container_sync(app_id: int) -> dict:
-    """Blocking implementation — call via asyncio.to_thread so it doesn't
-    stall the event loop while pulling/recreating."""
-    conn = get_db()
-    row = conn.execute("SELECT * FROM apps WHERE id = ?", (app_id,)).fetchone()
-    conn.close()
-    if not row:
-        return {"ok": False, "error": "App not found"}
-    if not row["container_name"]:
-        return {
-            "ok": False,
-            "error": (
-                "This app isn't linked to a running container (it was added manually), "
-                "so it can't be auto-updated. Update it yourself, then use 'Mark updated'."
-            ),
-        }
-
-    try:
-        client = docker_sdk.from_env()
-        container = client.containers.get(row["container_name"])
-    except Exception as e:
-        return {"ok": False, "error": f"Container '{row['container_name']}' not found on this host: {e}"}
-
-    attrs = container.attrs
-    image_ref = attrs["Config"]["Image"]
-    repo_ref, candidates = _guess_update_target(image_ref, row["latest_version"])
-
-    pulled_tag, pull_error = None, None
-    for tag in candidates:
-        try:
-            client.images.pull(repo_ref, tag=tag)
-            pulled_tag = tag
-            break
-        except Exception as e:
-            pull_error = str(e)
-
-    if not pulled_tag:
-        client.close()
-        return {
-            "ok": False,
-            "error": f"Couldn't pull an image for {repo_ref} (tried {candidates}): {pull_error}",
-        }
-
-    new_image_ref = f"{repo_ref}:{pulled_tag}"
-    old_name = container.name
-    temp_name = f"{old_name}_dockertracker_new"
-    config = attrs["Config"]
-    host_config = attrs["HostConfig"]
-    networks = (attrs.get("NetworkSettings") or {}).get("Networks") or {}
-    api = client.api
-
-    # Stage 1: build the replacement without touching the running container.
-    try:
-        # clear out a stale temp container from a previous failed attempt, if any
-        try:
-            api.remove_container(temp_name, force=True)
-        except Exception:
-            pass
-        new_container = api.create_container(
-            image=new_image_ref,
-            name=temp_name,
-            command=config.get("Cmd"),
-            entrypoint=config.get("Entrypoint"),
-            environment=config.get("Env"),
-            labels=config.get("Labels"),
-            working_dir=config.get("WorkingDir") or None,
-            user=config.get("User") or None,
-            host_config=host_config,
-            ports=[p.split("/")[0] for p in (config.get("ExposedPorts") or {}).keys()],
-        )
-    except Exception as e:
-        client.close()
-        return {
-            "ok": False,
-            "error": f"Pulled {new_image_ref} but failed to build the replacement container: {e}. "
-                     f"The running container was left untouched.",
-        }
-
-    new_id = new_container["Id"]
-
-    # Stage 2: swap it in.
-    try:
-        for net_name, net_conf in networks.items():
-            try:
-                network = client.networks.get(net_name)
-                network.connect(new_id, aliases=(net_conf.get("Aliases") or None))
-            except Exception:
-                pass  # the primary network from host_config usually covers it anyway
-
-        container.stop(timeout=15)
-        container.remove()
-        api.rename(new_id, old_name)
-        api.start(new_id)
-    except Exception as e:
-        client.close()
-        return {
-            "ok": False,
-            "error": f"Pulled {new_image_ref} and built the replacement, but hit an error while "
-                     f"swapping it in: {e}. Check `docker ps -a` on the host — you may need to "
-                     f"finish this by hand (the new container may be sitting as '{temp_name}').",
-        }
-
-    client.close()
-
-    now = datetime.now(timezone.utc).isoformat()
-    conn = get_db()
-    conn.execute(
-        """UPDATE apps SET current_version = latest_version, update_available = 0,
-                            last_error = NULL, last_updated = ? WHERE id = ?""",
-        (now, app_id),
-    )
-    conn.commit()
-    conn.close()
-    return {"ok": True, "image": new_image_ref}
-
-
-async def update_container(app_id: int) -> dict:
-    return await asyncio.to_thread(_update_container_sync, app_id)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -694,29 +532,6 @@ async def check_all_now():
 async def sync_containers_now():
     added = await sync_containers()
     return {"added": added}
-
-
-class BulkUpdateRequest(BaseModel):
-    ids: list[int]
-
-
-@app.post("/api/apps/{app_id}/update")
-async def update_now(app_id: int):
-    result = await update_container(app_id)
-    if not result["ok"]:
-        raise HTTPException(status_code=400, detail=result["error"])
-    conn = get_db()
-    row = conn.execute("SELECT * FROM apps WHERE id = ?", (app_id,)).fetchone()
-    conn.close()
-    return row_to_dict(row)
-
-
-@app.post("/api/apps/bulk-update")
-async def bulk_update(payload: BulkUpdateRequest):
-    results = {}
-    for app_id in payload.ids:
-        results[str(app_id)] = await update_container(app_id)
-    return results
 
 
 # ---------- static frontend ----------

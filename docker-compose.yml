@@ -1,29 +1,23 @@
 services:
   docker-tracker:
-    # Pulls the image built by this repo's GitHub Actions workflow — no
-    # local build needed, just `docker compose up -d`.
-    # Replace OWNER/REPO with your actual GitHub owner/repo (lowercase).
-    image: ghcr.io/OWNER/REPO:latest
-    # If you'd rather build locally instead (e.g. you've changed the code
-    # and haven't pushed yet), comment the `image:` line above and
-    # uncomment this one, then run `docker compose up -d --build`:
-    # build: .
+    build: .
+    # or, once you've pushed/pulled an image instead of building locally:
+    # image: docker-tracker:latest
     container_name: docker-tracker
     restart: unless-stopped
     ports:
       - "8752:8000"
     volumes:
       - ./data:/data
-      # Lets the app auto-track running containers AND perform one-click
-      # updates (pull + recreate). This is read-write on purpose now — see
-      # the README before mounting it. Comment this out if you'd rather
-      # skip auto-tracking/auto-update entirely and only use "Track an app".
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Lets the app auto-track your currently-running containers (read-only).
+      # Comment this out if you'd rather not share the Docker socket —
+      # everything else still works, you'll just add apps by hand.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       # How often (in hours) to poll GitHub for new releases
       CHECK_INTERVAL_HOURS: "6"
       # How often (in minutes) to scan the Docker socket for new containers
-      # to auto-track. Only matters if the socket volume above is mounted.
+      # to auto-track. Only matters if the socket volume below is mounted.
       CONTAINER_SYNC_INTERVAL_MINUTES: "10"
       # Seconds to wait between checking each app, to stay under GitHub's rate limit
       REQUEST_SPACING_SECONDS: "3"

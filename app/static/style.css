@@ -16,22 +16,6 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-html[data-theme="light"] {
-  --bg: #f4f6f9;
-  --panel: #ffffff;
-  --panel-raised: #ffffff;
-  --border: #dde3ea;
-  --border-soft: #e9edf2;
-  --text: #1b232c;
-  --text-dim: #5b6874;
-  --text-faint: #97a2ad;
-  --signal: #0f9d6e;
-  --signal-dim: #bfe9d8;
-  --warn: #c94f34;
-  --warn-dim: #f3d4cb;
-  --scan: #1f8fae;
-}
-
 * { box-sizing: border-box; }
 
 html, body {
@@ -41,7 +25,6 @@ html, body {
   color: var(--text);
   font-family: var(--font-sans);
   min-height: 100vh;
-  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 body {
@@ -143,28 +126,6 @@ body {
 .stat-signal .stat-value { color: var(--signal); }
 .stat-error .stat-value { color: var(--warn); }
 
-.theme-switch {
-  display: flex;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.theme-btn {
-  background: var(--panel-raised);
-  border: none;
-  border-right: 1px solid var(--border);
-  color: var(--text-faint);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 7px 10px;
-  cursor: pointer;
-}
-.theme-btn:last-child { border-right: none; }
-.theme-btn:hover { color: var(--text); }
-.theme-btn.active { color: var(--bg); background: var(--scan); }
-.theme-btn:focus-visible { outline: 2px solid var(--scan); outline-offset: -2px; }
-
 .topbar-actions { display: flex; gap: 10px; }
 
 .btn {
@@ -188,22 +149,6 @@ body {
   color: #06231a;
 }
 .btn-primary:hover { background: #3fe4a8; border-color: #3fe4a8; }
-
-.btn-update {
-  background: var(--signal);
-  border-color: var(--signal);
-  color: #06231a;
-  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
-  animation: update-glow 2.2s ease-in-out infinite;
-}
-.btn-update:hover { background: #3fe4a8; border-color: #3fe4a8; }
-@keyframes update-glow {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18); }
-  50% { box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.08); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .btn-update { animation: none; }
-}
 
 .btn-ghost { background: transparent; }
 
@@ -246,24 +191,6 @@ main { padding: 24px 32px 60px; max-width: 1280px; margin: 0 auto; }
 }
 .toggle input { accent-color: var(--signal); width: 14px; height: 14px; }
 
-.bulk-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--panel-raised);
-  border: 1px solid var(--signal-dim);
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  color: var(--text);
-}
-.bulk-bar #bulk-count {
-  font-family: var(--font-mono);
-  color: var(--text-dim);
-  margin-right: auto;
-}
-
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -291,20 +218,6 @@ main { padding: 24px 32px 60px; max-width: 1280px; margin: 0 auto; }
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-}
-
-.card-select {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.card-select input[type="checkbox"] {
-  accent-color: var(--signal);
-  width: 15px;
-  height: 15px;
-  margin-top: 3px;
-  cursor: pointer;
-  flex-shrink: 0;
 }
 
 .card-name {
@@ -461,23 +374,6 @@ main { padding: 24px 32px 60px; max-width: 1280px; margin: 0 auto; }
   color: var(--warn);
   font-size: 12px;
   margin: -4px 0 12px;
-}
-
-.update-modal-body {
-  font-size: 13px;
-  color: var(--text-dim);
-  margin: 0 0 10px;
-  line-height: 1.5;
-}
-.update-modal-warning {
-  font-size: 12px;
-  color: var(--warn);
-  background: rgba(242, 121, 90, 0.08);
-  border: 1px solid var(--warn-dim);
-  border-radius: 6px;
-  padding: 10px 12px;
-  line-height: 1.5;
-  margin: 0 0 4px;
 }
 
 .toast {

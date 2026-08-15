@@ -15,18 +15,8 @@ const fRepo = document.getElementById("f-repo");
 const fImage = document.getElementById("f-image");
 const fVersion = document.getElementById("f-version");
 
-const updateModalBackdrop = document.getElementById("update-modal-backdrop");
-const updateModalBody = document.getElementById("update-modal-body");
-const updateCancelBtn = document.getElementById("update-cancel-btn");
-const updateConfirmBtn = document.getElementById("update-confirm-btn");
-
-const bulkBar = document.getElementById("bulk-bar");
-const bulkCount = document.getElementById("bulk-count");
-
 let apps = [];
 let editingAppId = null; // set when the modal is being used to add a repo to an auto-tracked app
-let selected = new Set();
-let pendingUpdate = null; // { ids: [...] } awaiting confirmation in the update modal
 
 function fmtDate(iso) {
   if (!iso) return "never checked";
@@ -46,7 +36,7 @@ function showToast(msg) {
   toast.textContent = msg;
   toast.classList.remove("hidden");
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => toast.classList.add("hidden"), 3200);
+  showToast._t = setTimeout(() => toast.classList.add("hidden"), 2600);
 }
 
 function setScanning(active) {
@@ -67,13 +57,7 @@ async function api(path, opts = {}) {
 
 async function loadApps() {
   apps = await api("/api/apps");
-  // drop selections for apps that no longer exist or no longer have an update
-  const stillValid = new Set(apps.filter((a) => a.update_available && a.container_name).map((a) => a.id));
-  for (const id of [...selected]) {
-    if (!stillValid.has(id)) selected.delete(id);
-  }
   render();
-  renderBulkBar();
 }
 
 async function loadStats() {
@@ -107,12 +91,6 @@ function render() {
   for (const a of filtered) {
     grid.appendChild(renderCard(a));
   }
-}
-
-function renderBulkBar() {
-  const count = selected.size;
-  bulkBar.classList.toggle("hidden", count === 0);
-  bulkCount.textContent = `${count} selected`;
 }
 
 function renderCard(a) {
@@ -151,16 +129,12 @@ function renderCard(a) {
 
   const currentV = a.current_version || "unknown";
   const latestV = a.latest_version || "—";
-  const canAutoUpdate = a.update_available && a.container_name;
 
   card.innerHTML = `
     <div class="card-top">
-      <div class="card-select">
-        ${canAutoUpdate ? `<input type="checkbox" data-select="${a.id}" ${selected.has(a.id) ? "checked" : ""} title="Select for bulk update" />` : ""}
-        <div>
-          <p class="card-name">${escapeHtml(a.name)} ${a.source === "container" ? '<span class="tag-auto">auto</span>' : ""}</p>
-          <a class="card-repo" href="https://github.com/${a.repo}" target="_blank" rel="noopener">${escapeHtml(a.repo)}</a>
-        </div>
+      <div>
+        <p class="card-name">${escapeHtml(a.name)} ${a.source === "container" ? '<span class="tag-auto">auto</span>' : ""}</p>
+        <a class="card-repo" href="https://github.com/${a.repo}" target="_blank" rel="noopener">${escapeHtml(a.repo)}</a>
       </div>
       <span class="dot ${dotClass}" title="${a.update_available ? "Update available" : a.last_error ? "Check failed" : "Up to date"}"></span>
     </div>
@@ -171,23 +145,12 @@ function renderCard(a) {
     </div>
     ${a.last_error ? `<p class="card-error-msg">${escapeHtml(a.last_error)}</p>` : `<p class="card-meta">checked ${fmtDate(a.last_checked)}</p>`}
     <div class="card-actions">
-      ${canAutoUpdate ? `<button class="btn btn-update btn-small" data-action="update">Update</button>` : ""}
       <button class="btn btn-ghost btn-small" data-action="check">Check now</button>
       ${a.update_available ? `<button class="btn btn-ghost btn-small" data-action="ack">Mark updated</button>` : ""}
       <button class="btn btn-ghost btn-small" data-action="delete">Remove</button>
     </div>
   `;
 
-  const selectBox = card.querySelector("[data-select]");
-  if (selectBox) {
-    selectBox.addEventListener("change", () => {
-      if (selectBox.checked) selected.add(a.id);
-      else selected.delete(a.id);
-      renderBulkBar();
-    });
-  }
-  const updateBtn = card.querySelector('[data-action="update"]');
-  if (updateBtn) updateBtn.addEventListener("click", () => confirmUpdate([a.id], a.name));
   card.querySelector('[data-action="check"]').addEventListener("click", () => checkApp(a.id));
   const ackBtn = card.querySelector('[data-action="ack"]');
   if (ackBtn) ackBtn.addEventListener("click", () => ackApp(a.id));
@@ -228,9 +191,7 @@ async function deleteApp(id, name) {
   if (!confirm(`Stop tracking ${name}?`)) return;
   try {
     await api(`/api/apps/${id}`, { method: "DELETE" });
-    selected.delete(id);
     await Promise.all([loadApps(), loadStats()]);
-    renderBulkBar();
   } catch (e) {
     showToast(e.message);
   }
@@ -261,74 +222,6 @@ async function rescanContainers() {
     setScanning(false);
   }
 }
-
-// ---- update / bulk update (real pull + recreate) ----
-
-function confirmUpdate(ids, label) {
-  pendingUpdate = { ids };
-  updateModalBody.textContent =
-    ids.length === 1
-      ? `This will pull the new image for ${label} and recreate its container.`
-      : `This will pull new images and recreate ${ids.length} containers, one at a time.`;
-  updateModalBackdrop.classList.remove("hidden");
-}
-
-updateCancelBtn.addEventListener("click", () => {
-  pendingUpdate = null;
-  updateModalBackdrop.classList.add("hidden");
-});
-updateModalBackdrop.addEventListener("click", (e) => {
-  if (e.target === updateModalBackdrop) {
-    pendingUpdate = null;
-    updateModalBackdrop.classList.add("hidden");
-  }
-});
-
-updateConfirmBtn.addEventListener("click", async () => {
-  if (!pendingUpdate) return;
-  const { ids } = pendingUpdate;
-  updateModalBackdrop.classList.add("hidden");
-  pendingUpdate = null;
-  setScanning(true);
-  updateConfirmBtn.disabled = true;
-
-  try {
-    if (ids.length === 1) {
-      await api(`/api/apps/${ids[0]}/update`, { method: "POST" });
-      showToast("Updated");
-    } else {
-      const results = await api("/api/apps/bulk-update", {
-        method: "POST",
-        body: JSON.stringify({ ids }),
-      });
-      const outcomes = Object.values(results);
-      const okCount = outcomes.filter((r) => r.ok).length;
-      const failCount = outcomes.length - okCount;
-      showToast(
-        failCount === 0
-          ? `Updated ${okCount} app(s)`
-          : `Updated ${okCount}, ${failCount} failed — check each card for details`
-      );
-    }
-  } catch (e) {
-    showToast(e.message);
-  } finally {
-    for (const id of ids) selected.delete(id);
-    updateConfirmBtn.disabled = false;
-    setScanning(false);
-    await Promise.all([loadApps(), loadStats()]);
-  }
-});
-
-document.getElementById("bulk-update-btn").addEventListener("click", () => {
-  if (selected.size === 0) return;
-  confirmUpdate([...selected], null);
-});
-document.getElementById("bulk-clear-btn").addEventListener("click", () => {
-  selected.clear();
-  render();
-  renderBulkBar();
-});
 
 // ---- modal ----
 // mode "add" (default): create a brand new tracked app
@@ -413,46 +306,13 @@ modalBackdrop.addEventListener("click", (e) => {
   if (e.target === modalBackdrop) closeModal();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    closeModal();
-    updateModalBackdrop.classList.add("hidden");
-    pendingUpdate = null;
-  }
+  if (e.key === "Escape") closeModal();
 });
 
 document.getElementById("check-all-btn").addEventListener("click", checkAll);
 document.getElementById("rescan-btn").addEventListener("click", rescanContainers);
 searchInput.addEventListener("input", render);
 filterUpdates.addEventListener("change", render);
-
-// ---- theme ----
-
-const THEME_KEY = "dt-theme";
-const themeButtons = document.querySelectorAll(".theme-btn");
-
-function applyTheme(pref) {
-  const effective =
-    pref === "system"
-      ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
-      : pref;
-  document.documentElement.setAttribute("data-theme", effective);
-  themeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.themeChoice === pref));
-}
-
-function setThemePreference(pref) {
-  localStorage.setItem(THEME_KEY, pref);
-  applyTheme(pref);
-}
-
-themeButtons.forEach((btn) => {
-  btn.addEventListener("click", () => setThemePreference(btn.dataset.themeChoice));
-});
-
-window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
-  if ((localStorage.getItem(THEME_KEY) || "system") === "system") applyTheme("system");
-});
-
-applyTheme(localStorage.getItem(THEME_KEY) || "system");
 
 // initial load + light polling so the dashboard reflects background checks
 loadApps();
