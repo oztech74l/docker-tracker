@@ -7,6 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css" />
+<script>
+  // applied before paint to avoid a flash of the wrong theme
+  (function () {
+    var pref = localStorage.getItem("dt-theme") || "system";
+    var effective = pref === "system"
+      ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+      : pref;
+    document.documentElement.setAttribute("data-theme", effective);
+  })();
+</script>
 </head>
 <body>
 
@@ -36,6 +46,12 @@
     </div>
   </div>
 
+  <div class="theme-switch" role="group" aria-label="Theme">
+    <button class="theme-btn" data-theme-choice="dark" title="Dark mode">Dark</button>
+    <button class="theme-btn" data-theme-choice="light" title="Light mode">Light</button>
+    <button class="theme-btn" data-theme-choice="system" title="Match system">System</button>
+  </div>
+
   <div class="topbar-actions">
     <button class="btn btn-ghost" id="rescan-btn">Rescan containers</button>
     <button class="btn btn-ghost" id="check-all-btn">Check for updates</button>
@@ -50,6 +66,12 @@
       <input type="checkbox" id="filter-updates" />
       <span>Updates available only</span>
     </label>
+  </div>
+
+  <div class="bulk-bar hidden" id="bulk-bar">
+    <span id="bulk-count">0 selected</span>
+    <button class="btn btn-ghost btn-small" id="bulk-clear-btn">Clear</button>
+    <button class="btn btn-update btn-small" id="bulk-update-btn">Update selected</button>
   </div>
 
   <div id="empty-state" class="empty-state hidden">
@@ -93,6 +115,19 @@
         <button type="submit" class="btn btn-primary" id="submit-btn">Start tracking</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Update confirmation modal -->
+<div class="modal-backdrop hidden" id="update-modal-backdrop">
+  <div class="modal">
+    <h2 id="update-modal-title">Update this app?</h2>
+    <p class="update-modal-body" id="update-modal-body"></p>
+    <p class="update-modal-warning">This stops, removes, and recreates the container with its current settings. It's usually safe, but it's a real change to a running service — make sure anything important is backed up.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="update-cancel-btn">Cancel</button>
+      <button type="button" class="btn btn-update" id="update-confirm-btn">Update now</button>
+    </div>
   </div>
 </div>
 
